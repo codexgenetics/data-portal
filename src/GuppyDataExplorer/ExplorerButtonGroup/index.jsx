@@ -25,6 +25,16 @@ class ExplorerButtonGroup extends React.Component {
     this.state = {
       // for manifest
       manifestEntryCount: 0,
+      // Set to true while the manifest entry count is being (re)computed.
+      // Kept separate from `downloadingInProgress.manifest` (which now only
+      // tracks an *actual* manifest download) so that manifest counting -- a
+      // spinner-only state -- no longer disables the "Download All Data"
+      // button or any other download button. Previously counting reused
+      // `downloadingInProgress.manifest` as a spinner trick, which (via the
+      // `every()` enabled-check) greyed out both download buttons, and if the
+      // count failed it left that flag stuck at true, permanently disabling
+      // both buttons.
+      manifestCountInProgress: false,
       // for exports
       toasterOpen: false,
       toasterHeadline: '',
@@ -676,24 +686,28 @@ Currently, in order to export a File PFB, \`enableLimitedFilePFBExport\` must be
       || !this.props.guppyConfig.manifestMapping.referenceIdFieldInResourceIndex) return;
     const caseField = this.props.guppyConfig.manifestMapping.referenceIdFieldInDataIndex;
     const caseFieldInFileIndex = this.props.guppyConfig.manifestMapping.referenceIdFieldInResourceIndex;
+    let fileCount;
+    try {
     if (this.props.buttonConfig
       && this.props.buttonConfig.buttons
       && this.props.buttonConfig.buttons.some(
         (btnCfg) => isFileButton(btnCfg) && btnCfg.enabled)) {
       if (this.props.guppyConfig.fileCountField) {
         // if "fileCountField" is set, just ask for sum of file_count field
-        const totalFileCount = await this.getFileCountSum();
-        this.setState(() => ({
-          manifestEntryCount: totalFileCount,
-        }));
+        fileCount = await this.getFileCountSum();
       } else {
         // otherwise, just query subject index for subject_id list,
         // and query file index for manifest info.
-        // Setting downloadingInProgress of manifest to true as a trick such that the button's isPending
-        // state is set to true while the manifest is being counted. This is because we want the button to show
-        // the spinner instead of the download icon while the counting is in progress.
+        // Set `manifestCountInProgress` to true while the manifest entry count
+        // is being computed so the manifest button shows its spinner (see
+        // isButtonPending). This is a spinner-only state and MUST NOT reuse
+        // `downloadingInProgress.manifest`: that flag also drives the
+        // enabled-check for *every* download button, so reusing it would grey
+        // out the "Download All Data" button during counting -- and if the
+        // count failed it would leave the flag stuck at true, permanently
+        // disabling both download buttons.
         this.setState({
-          manifestEntryCount: 0, downloadingInProgress: { manifest: true }, toasterOpen: false,
+          manifestEntryCount: 0, manifestCountInProgress: true, toasterOpen: false,
         });
         const caseIDResult = await this.props.downloadRawDataByFields({ fields: [caseField] });
         if (caseIDResult) {
@@ -702,34 +716,43 @@ Currently, in order to export a File PFB, \`enableLimitedFilePFBExport\` must be
             throw Error('guppyConfig.manifestMapping.resourceIndexType is not defined');
           }
           if (this.props.guppyConfig.manifestMapping.useFilterForCounts) {
-            const countResult = await this.props.getTotalCountsByTypeAndFilter(fileType,
+            fileCount = await this.props.getTotalCountsByTypeAndFilter(fileType,
               this.props.filter,
             );
-            this.setState({
-              manifestEntryCount: countResult, downloadingInProgress: { manifest: false },
-            });
           } else {
             let caseIDList = caseIDResult.map((i) => i[caseField]);
             caseIDList = _.uniq(caseIDList);
-            let countResult;
             if (caseIDList.length <= ES_MAX_QUERY_TERMS) {
-              countResult = await this.props.getTotalCountsByTypeAndFilter(fileType, {
+              fileCount = await this.props.getTotalCountsByTypeAndFilter(fileType, {
                 [caseFieldInFileIndex]: {
                   selectedValues: caseIDList,
                 },
               });
             } else {
-              // this will disable the button, preventing download attemps that would fail
-              countResult = 'too-many-terms';
+              fileCount = ES_MAX_QUERY_TERMS + 1; // to trigger 'too-many-terms' logic below
             }
-            this.setState({
-              manifestEntryCount: countResult, downloadingInProgress: { manifest: false },
-            });
           }
         } else {
           throw Error('Error when downloading data');
         }
       }
+
+      // this will disable the button, preventing download attemps that would fail
+      fileCount = fileCount <= ES_MAX_QUERY_TERMS ? fileCount : 'too-many-terms';
+      this.setState({
+        manifestEntryCount: fileCount, manifestCountInProgress: false,
+      });
+    }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error('Failed to refresh manifest entry count:', err);
+      // Clear the counting flag (not `downloadingInProgress`, which is now
+      // untouched by counting) so a failed manifest count does not leave the
+      // manifest button's spinner stuck on. The data button is unaffected
+      // either way because it no longer reads the manifest counting state.
+      this.setState({
+        manifestEntryCount: 0, manifestCountInProgress: false,
+      });
     }
   };
 
@@ -785,9 +808,23 @@ Currently, in order to export a File PFB, \`enableLimitedFilePFBExport\` must be
       return !this.props.isLocked;
     }
     if (buttonConfig.type.startsWith('data') || buttonConfig.type === 'manifest' || buttonConfig.type === 'file-manifest') {
-      let isEnabled = Object.values(this.state.downloadingInProgress).every((x) => x === false);
+      // A download button is disabled only while an *actual* download is in
+      // progress (to prevent concurrent downloads), and -- for the manifest
+      // button -- while the manifest entry count is still being computed.
+      // Manifest counting no longer touches `downloadingInProgress` (it uses
+      // the separate `manifestCountInProgress` flag), so the "Download All
+      // Data" button is never disabled by manifest counting and never gets
+      // stuck disabled if the count fails.
+      const anyDownloadInProgress =
+        this.state.downloadingInProgress.data === true
+        || this.state.downloadingInProgress.manifest === true
+        || this.state.downloadingInProgress.fileManifest === true;
+      let isEnabled = !anyDownloadInProgress;
       if (buttonConfig.type === 'manifest') {
-        isEnabled = isEnabled && this.state.manifestEntryCount != 0 && this.state.manifestEntryCount != 'too-many-terms';
+        isEnabled = isEnabled
+          && !this.state.manifestCountInProgress
+          && this.state.manifestEntryCount != 0
+          && this.state.manifestEntryCount != 'too-many-terms';
       }
       return isEnabled;
     }
@@ -884,7 +921,7 @@ Currently, in order to export a File PFB, \`enableLimitedFilePFBExport\` must be
       return this.state.downloadingInProgress.data;
     }
     if (buttonConfig.type === 'manifest') {
-      return this.state.downloadingInProgress.manifest;
+      return this.state.downloadingInProgress.manifest || this.state.manifestCountInProgress;
     }
     if (buttonConfig.type === 'file-manifest') {
       return this.state.downloadingInProgress.fileManifest;
