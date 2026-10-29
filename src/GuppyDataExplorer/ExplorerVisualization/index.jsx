@@ -5,6 +5,7 @@ import GuppyWrapper from '@gen3/guppy/dist/components/GuppyWrapper';
 import ConnectedFilter from '@gen3/guppy/dist/components/ConnectedFilter';
 import SummaryChartGroup from '@gen3/ui-component/dist/components/charts/SummaryChartGroup';
 import PercentageStackedBarChart from '@gen3/ui-component/dist/components/charts/PercentageStackedBarChart';
+import BarChartWithCountPercentage from '../../components/charts/BarChartWithCountPercentage';
 import { components } from '../../params';
 import { guppyUrl, tierAccessLevel, tierAccessLimit } from '../../localconf';
 import DataSummaryCardGroup from '../../components/cards/DataSummaryCardGroup';
@@ -29,6 +30,7 @@ class ExplorerVisualization extends React.Component {
 
   getData = (aggsData, chartConfig, filter) => {
     const summaries = [];
+    const barSummaries = [];
     let countItems = [];
     const stackedBarCharts = [];
     countItems.push({
@@ -58,6 +60,10 @@ class ExplorerVisualization extends React.Component {
         };
         if (chartConfig[`${field}`].chartType === 'stackedBar') {
           stackedBarCharts.push(dataItem);
+        } else if (chartConfig[`${field}`].chartType === 'bar') {
+          // `bar` charts are rendered by BarChartWithCountPercentage to
+          // display both the count and the percentage of each item
+          barSummaries.push(dataItem);
         } else {
           summaries.push(dataItem);
         }
@@ -76,7 +82,7 @@ class ExplorerVisualization extends React.Component {
       if (bIndex === -1) return 1;
       return aIndex - bIndex;
     });
-    return { summaries, countItems, stackedBarCharts };
+    return { summaries, barSummaries, countItems, stackedBarCharts };
   }
 
   updateConnectedFilter = async (heatMapMainYAxisVar) => {
@@ -168,6 +174,33 @@ class ExplorerVisualization extends React.Component {
                 useCustomizedColorMap={!!components.categorical9Colors}
                 customizedColorMap={components.categorical9Colors || []}
               />
+            </div>
+          )
+        }
+        {
+          chartData.barSummaries.length > 0 && (
+            <div className='guppy-explorer-visualization__charts'>
+              {
+                chartData.barSummaries.map((chart, i) => (
+                  <div key={chart.title} className='guppy-explorer-visualization__charts-row'>
+                    {
+                      i > 0 && <div className='percentage-bar-chart__row-upper-border' />
+                    }
+                    {
+                      <BarChartWithCountPercentage
+                        key={chart.title}
+                        title={chart.title}
+                        data={chart.data}
+                        color={barChartColor}
+                        lockMessage={lockMessage}
+                        useCustomizedColorMap={!!components.categorical9Colors}
+                        customizedColorMap={components.categorical9Colors || []}
+                      />
+                    }
+                  </div>
+                ),
+                )
+              }
             </div>
           )
         }

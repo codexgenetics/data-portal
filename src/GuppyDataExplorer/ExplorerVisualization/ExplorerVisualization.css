@@ -13,6 +13,20 @@
   background-color: var(--g3-color__white);
 }
 
+.guppy-explorer-visualization__charts-row {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* divider between chart rows; mirrors the rule in
+   @gen3/ui-component's PercentageStackedBarChart.css */
+.percentage-bar-chart__row-upper-border {
+  margin-left: 12px;
+  margin-right: 12px;
+  border-top: solid var(--g3-color__silver) 1px;
+}
+
 .guppy-explorer-visualization__connected-filter--hide {
   display: none;
 }
