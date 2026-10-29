@@ -1,0 +1,12 @@
+FROM quay.io/cdis/data-portal:master
+
+# Apply local source fixes (download-button logic + BASENAME symlink on start).
+# The base image already contains source + node_modules, and runWebpack.sh
+# rebuilds /data-portal/bundle.js at container startup from src/, so simply
+# overlaying the patched files is enough for the fix to land in the live bundle.
+COPY dockerStart.sh /data-portal/dockerStart.sh
+COPY src/GuppyDataExplorer/ExplorerButtonGroup/index.jsx /data-portal/src/GuppyDataExplorer/ExplorerButtonGroup/index.jsx
+
+# Normalize line endings (the repo files may carry CRLF).
+RUN sed -i 's/\r$//' /data-portal/dockerStart.sh \
+        /data-portal/src/GuppyDataExplorer/ExplorerButtonGroup/index.jsx

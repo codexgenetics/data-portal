@@ -1,0 +1,23 @@
+FROM data-portal:csp-portfix
+
+# PATCH range-slider-decimal-fix (2026-10-28):
+# Fixes explorer range-slider filters for fractional numeric fields
+# (e.g. simoa_ptau217_result_pg_ml 0.149-0.856 pg/mL rendering as a
+# useless 0-1 integer slider).
+#   1) @gen3/guppy ConnectedFilter utils.getSingleFilterOption:
+#      - min/max now use the actual data domain (no Math.floor/Math.ceil)
+#      - adds dynamically computed rangeStep (~span/100, power of ten)
+#        and decimalDigitsLen to the filter option
+#   2) @gen3/ui-component FilterSection: forwards rangeStep /
+#      decimalDigitsLen to RangeFilter (props were already supported
+#      but never passed through).
+# The base image rebuilds /data-portal/bundle.js from src + node_modules
+# at container startup (runWebpack.sh), so overlaying these dist files is
+# enough for the fix to land in the live bundle.
+COPY patch-range/guppy/dist/components/ConnectedFilter/utils.js /data-portal/node_modules/@gen3/guppy/dist/components/ConnectedFilter/utils.js
+COPY patch-range/ui-component/dist/components/filters/FilterSection/index.js /data-portal/node_modules/@gen3/ui-component/dist/components/filters/FilterSection/index.js
+
+# Normalize line endings (repo files may carry CRLF).
+RUN sed -i 's/\r$//' \
+        /data-portal/node_modules/@gen3/guppy/dist/components/ConnectedFilter/utils.js \
+        /data-portal/node_modules/@gen3/ui-component/dist/components/filters/FilterSection/index.js

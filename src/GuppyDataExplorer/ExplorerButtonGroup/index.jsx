@@ -964,7 +964,9 @@ Currently, in order to export a File PFB, \`enableLimitedFilePFBExport\` must be
 
     const clickFunc = this.getOnClickFunction(buttonConfig);
     let buttonTitle = buttonConfig.title;
-    if (buttonConfig.type === 'data') {
+    // Show the record count on both "data" and "data-csv" download buttons
+    // (any button type starting with "data"), not just the JSON one.
+    if (buttonConfig.type.startsWith('data')) {
       const buttonCount = (this.props.totalCount >= 0) ? this.props.totalCount : 0;
       buttonTitle = `${buttonConfig.title} (${buttonCount})`;
     } else if (buttonConfig.type === 'manifest' && this.state.manifestEntryCount != 0) {
