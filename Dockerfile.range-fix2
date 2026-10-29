@@ -1,0 +1,14 @@
+# Incremental patch layer on top of gen3-portal-hkcend:1.0.0 (built from
+# data-portal/ codex-2025.09 + bar-chart count+percentage changes).
+# Re-applies the range-slider decimal fix (2026-10-28) onto the freshly
+# installed node_modules, so no fix is lost when switching images.
+# Build:  docker build -f Dockerfile.range-fix2 -t gen3-portal-hkcend:1.0.1 data-portal
+FROM gen3-portal-hkcend:1.0.0
+
+COPY patch-range/guppy/dist/components/ConnectedFilter/utils.js /data-portal/node_modules/@gen3/guppy/dist/components/ConnectedFilter/utils.js
+COPY patch-range/ui-component/dist/components/filters/FilterSection/index.js /data-portal/node_modules/@gen3/ui-component/dist/components/filters/FilterSection/index.js
+
+# Normalize line endings (repo files may carry CRLF).
+RUN sed -i 's/\r$//' \
+        /data-portal/node_modules/@gen3/guppy/dist/components/ConnectedFilter/utils.js \
+        /data-portal/node_modules/@gen3/ui-component/dist/components/filters/FilterSection/index.js
